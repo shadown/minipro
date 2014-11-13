@@ -17,6 +17,7 @@ struct {
 	device_t *device;
 	enum { UNSPECIFIED = 0, CODE, DATA, CONFIG } page;
         int erase;
+        int nocheckchipid;
         int protect_off;
         int protect_on;
         int icsp;
@@ -31,6 +32,7 @@ void print_help_and_exit(const char *progname) {
 		"	-e 		Do NOT erase device\n"
 		"	-u 		Do NOT disable write-protect\n"
 		"	-P 		Do NOT enable write-protect\n"
+		"	-z 		Do NOT validate Chip ID\n"
 		"	-p <device>	Specify device\n"
 		"	-c <type>	Specify memory type (optional)\n"
 		"			Possible values: code, data, config\n"
@@ -64,8 +66,12 @@ void parse_cmdline(int argc, char **argv) {
 		print_help_and_exit(argv[0]);
 	}
 
-	while((c = getopt(argc, argv, "euPr:w:p:c:iI")) != -1) {
+	while((c = getopt(argc, argv, "zeuPr:w:p:c:iI")) != -1) {
 		switch(c) {
+		        case 'z':
+			  cmdopts.nocheckchipid=1;  // 1= do not check chip id
+			  break;
+
 		        case 'e':
 			  cmdopts.erase=1;  // 1= do not erase
 			  break;
@@ -458,12 +464,16 @@ int main(int argc, char **argv) {
 	if(device->chip_id_bytes_count && device->chip_id) {
 		minipro_begin_transaction(handle);
 		unsigned int chip_id = minipro_get_chip_id(handle);
-		if (chip_id == device->chip_id) {
-			printf("Chip ID OK: 0x%02x\n", chip_id);
+		if (!cmdopts.nocheckchipid){
+			if (chip_id == device->chip_id) {
+				printf("Chip ID OK: 0x%02x\n", chip_id);
+			} else {
+				ERROR2("Invalid Chip ID: expected 0x%02x, got 0x%02x\n", device->chip_id, chip_id);
+			}		
+			minipro_end_transaction(handle);
 		} else {
-			ERROR2("Invalid Chip ID: expected 0x%02x, got 0x%02x\n", device->chip_id, chip_id);
-		}		
-		minipro_end_transaction(handle);
+			printf("Chip ID (Skipping): expected 0x%02x, got 0x%02x\n", device->chip_id, chip_id);
+		}
 	}
 
 	/* TODO: put in devices.h and remove this stub */
